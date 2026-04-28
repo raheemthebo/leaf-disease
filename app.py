@@ -1,50 +1,51 @@
-from fastapi import FastAPI, Request, HTTPException, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
-import logging
-import os
-from utils import convert_image_to_base64_and_test, test_with_base64_data
+from fastapi.middleware.cors import CORSMiddleware
+from utils import image_to_base64
+from Leaf_Disease.main import LeafDiseaseDetector
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+try:
+    app = FastAPI(title="Leaf Disease Detection API", version="1.0.0")
+    detector = LeafDiseaseDetector()
+except ValueError as e:
+    raise RuntimeError(f"❌ Cannot start API: {str(e)}")
 
-app = FastAPI(title="Leaf Disease Detection API", version="1.0.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.post('/disease-detection-file')
-async def disease_detection_file(file: UploadFile = File(...)):
-    """
-    Endpoint to detect diseases in leaf images using direct image file upload.
-    Accepts multipart/form-data with an image file.
-    """
+@app.post("/disease-detection")
+async def detect_disease(file: UploadFile = File(...)):
+    """Detect leaf disease from uploaded image using Groq API."""
     try:
-        logger.info("Received image file for disease detection")
+        if not file.content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="❌ File must be an image")
         
-        # Read uploaded file into memory
-        contents = await file.read()
+        image_base64 = image_to_base64(file.file)
+        result = detector.analyze_leaf(image_base64)
         
-    # Process file directly from memory
-        result = convert_image_to_base64_and_test(contents)
-        
-    # No cleanup needed since file is not saved locally
-        
-        if result is None:
-            raise HTTPException(status_code=500, detail="Failed to process image file")
-        logger.info("Disease detection from file completed successfully")
-        return JSONResponse(content=result)
+        return JSONResponse(content={
+            "disease_detected": result.disease_detected,
+            "disease_name": result.disease_name,
+            "disease_type": result.disease_type,
+            "severity": result.severity,
+            "confidence": result.confidence,
+            "symptoms": result.symptoms,
+            "causes": result.causes,
+            "treatment": result.treatment,
+            "roman_urdu_explanation": result.roman_urdu_explanation,
+            "timestamp": result.timestamp
+        })
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in disease detection (file): {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"❌ {str(e)}")
 
-
-@app.get("/")
-async def root():
-    """Root endpoint providing API information"""
-    return {
-        "message": "Leaf Disease Detection API",
-        "version": "1.0.0",
-        "endpoints": {
-            "disease_detection_file": "/disease-detection-file (POST, file upload)"
-        }
-    }
+@app.get("/health")
+async def health_check():
+    """API health check."""
+    return {"status": "ok", "message": "API requires valid Groq API key"}

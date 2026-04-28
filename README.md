@@ -487,4 +487,5 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 **Star ⭐ this repository if it helped you protect your plants!**
 
-</div>
+</div>#   l e a f - d i s e a s e  
+ 
